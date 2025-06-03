@@ -1,0 +1,172 @@
+{
+  "description": "TradeMonkey Lite Strategy Configuration - Where the magic happens! 🎯",
+  "version": "1.0.0",
+  "last_updated": "2025-05-31",
+  
+  "symbols": [
+    "BTC/USD",
+    "ETH/USD", 
+    "SOL/USD",
+    "POL/USD"
+  ],
+  
+  "timeframes": [
+    "5m",
+    "15m", 
+    "1h",
+    "4h"
+  ],
+  
+  "min_confirmations": 3,
+  
+  "signal_generation": {
+    "long_conditions": {
+      "description": "Conditions that must be met for a LONG signal",
+      "required_confirmations": 4,
+      "conditions": [
+        "price > sma_20",
+        "sma_20 > sma_50", 
+        "rsi > 50 AND rsi < 70",
+        "macd > macd_signal",
+        "price > bb_middle"
+      ]
+    },
+    "short_conditions": {
+      "description": "Conditions that must be met for a SHORT signal", 
+      "required_confirmations": 4,
+      "conditions": [
+        "price < sma_20",
+        "sma_20 < sma_50",
+        "rsi < 50 AND rsi > 30", 
+        "macd < macd_signal",
+        "price < bb_middle"
+      ]
+    },
+    "volume_confirmation": {
+      "enabled": true,
+      "min_volume_ratio": 1.5,
+      "description": "Volume must be 50% above 20-period average"
+    }
+  },
+  
+  "risk_management": {
+    "max_positions": 4,
+    "position_size_pct": 0.25,
+    "initial_leverage": 2.0,
+    "max_leverage": 3.0,
+    "trailing_stop_pct": 0.05,
+    "partial_take_profits": [0.02, 0.05, 0.10, 0.20],
+    "partial_close_amounts": [0.25, 0.25, 0.25, 0.25],
+    "atr_stop_multiplier": 2.0,
+    "leverage_scaling": {
+      "enabled": true,
+      "profit_threshold_pct": 10.0,
+      "leverage_increment": 0.5,
+      "description": "Increase leverage by 0.5x when position is 10%+ profitable"
+    }
+  },
+  
+  "technical_indicators": {
+    "moving_averages": {
+      "sma_short": 20,
+      "sma_long": 50,
+      "ema_fast": 12,
+      "ema_slow": 26
+    },
+    "momentum": {
+      "rsi_period": 14,
+      "rsi_oversold": 30,
+      "rsi_overbought": 70
+    },
+    "trend": {
+      "macd_fast": 12,
+      "macd_slow": 26,
+      "macd_signal": 9
+    },
+    "volatility": {
+      "bb_period": 20,
+      "bb_std_dev": 2,
+      "atr_period": 14
+    },
+    "volume": {
+      "volume_ma_period": 20,
+      "volume_threshold": 1.5
+    }
+  },
+  
+  "operational_settings": {
+    "signal_check_interval": 30,
+    "position_management_interval": 15,
+    "max_api_requests_per_minute": 1000,
+    "reconnect_attempts": 3,
+    "reconnect_delay": 5,
+    "data_retention_days": 30
+  },
+  
+  "notification_settings": {
+    "discord": {
+      "enabled": true,
+      "alert_types": [
+        "position_opened",
+        "position_closed", 
+        "partial_profit",
+        "stop_loss",
+        "leverage_increased",
+        "system_errors"
+      ],
+      "colors": {
+        "profit": "0x00FF00",
+        "loss": "0xFF0000", 
+        "info": "0x0099FF",
+        "warning": "0xFFAA00"
+      }
+    },
+    "telegram": {
+      "enabled": true,
+      "alert_types": [
+        "position_opened",
+        "position_closed",
+        "partial_profit", 
+        "stop_loss",
+        "daily_summary"
+      ]
+    }
+  },
+  
+  "backtesting": {
+    "enabled": false,
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-31", 
+    "initial_capital": 10000,
+    "commission": 0.001,
+    "slippage": 0.0005
+  },
+  
+  "safety_limits": {
+    "max_daily_trades": 50,
+    "max_daily_loss_pct": 5.0,
+    "circuit_breaker": {
+      "enabled": true,
+      "loss_threshold_pct": 10.0,
+      "pause_duration_minutes": 60,
+      "description": "Pause trading if total loss exceeds 10% in a day"
+    }
+  },
+  
+  "comments": {
+    "strategy_notes": [
+      "This is a momentum-based multi-timeframe strategy",
+      "Requires 3+ timeframes to confirm before entering",
+      "Uses partial profit taking to lock in gains",
+      "ATR-based stops for dynamic risk management",
+      "Volume confirmation helps filter false signals"
+    ],
+    "risk_warnings": [
+      "Past performance does not guarantee future results",
+      "Crypto markets are highly volatile and unpredictable", 
+      "Never invest more than you can afford to lose",
+      "Always test strategies thoroughly before live trading",
+      "Monitor positions regularly and adjust as needed"
+    ]
+  }
+}

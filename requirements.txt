@@ -1,0 +1,39 @@
+# TradeMonkey Lite Dependencies
+# "In dependency management we trust" - Ancient DevOps proverb
+
+# Core trading libraries
+ccxt>=4.0.0                    # The Swiss Army knife of crypto APIs
+pandas>=2.0.0                  # Data manipulation wizardry
+numpy>=1.24.0                  # Mathematical superpowers
+ta>=0.10.2                     # Technical analysis indicators
+
+# Async & HTTP
+aiohttp>=3.8.0                 # Async HTTP for notifications
+asyncio-throttle>=1.0.2        # Rate limiting like a pro
+
+# Environment & Config
+python-dotenv>=1.0.0           # Keep secrets secret
+coloredlogs>=15.0              # Pretty logging because we're fancy
+
+# Data handling
+datetime                       # Built-in, but noting for clarity
+json                          # Built-in JSON support
+time                          # Built-in time functions
+logging                       # Built-in logging
+os                           # Built-in OS interaction
+typing                       # Built-in type hints
+dataclasses                  # Built-in dataclass support
+enum                         # Built-in enum support
+
+# Optional but recommended
+requests>=2.31.0              # Backup HTTP client
+websocket-client>=1.6.0       # WebSocket support for real-time data
+
+# Development dependencies (install with pip install -r requirements-dev.txt)
+# pytest>=7.0.0               # Testing framework
+# pytest-asyncio>=0.21.0      # Async testing
+# black>=23.0.0               # Code formatting
+# mypy>=1.0.0                 # Type checking
+
+# Note: Some imports like datetime, json, time, logging, os, typing, dataclasses, enum
+# are built-in Python modules and don't need to be installed via pip

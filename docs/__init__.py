@@ -1,0 +1,1 @@
+"""TradeMonkey Lite module"""
