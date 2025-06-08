@@ -1,350 +1,457 @@
 // File: src/components/trading/TradingChartWithSentiment.tsx
-import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
-import { useTickers, useSentiment } from '@/hooks/useRealtimeData';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, TrendingDown, Activity, Zap } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { 
+  formatPrice, 
+  formatPercentage, 
+  getSentimentColor, 
+  getChangeColor,
+  generateTimeLabels,
+  generateMockPriceData,
+  cyberCard,
+  TIMEFRAMES 
+} from '@/lib/utils';
+import type { SentimentData, Ticker } from '@/types/trading';
 
-interface CandleData {
-  timestamp: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  sentiment?: number;
-}
-
-interface ChartProps {
+interface TradingChartProps {
   symbol?: string;
   timeframe?: string;
+  demoMode?: boolean;
+  tickers?: Record<string, Ticker>;
+  sentiment?: SentimentData;
 }
 
-const TradingChartWithSentiment: React.FC<ChartProps> = ({ 
-  symbol = 'BTC/USD', 
-  timeframe = '1h' 
+interface ChartPoint {
+  timestamp: number;
+  price: number;
+  sentiment: number;
+  volume: number;
+}
+
+const TradingChartWithSentiment: React.FC<TradingChartProps> = ({
+  symbol = 'BTC/USD',
+  timeframe = '1h',
+  demoMode = false,
+  tickers,
+  sentiment
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selectedSymbol, setSelectedSymbol] = useState(symbol);
-  const [candleData, setCandleData] = useState<CandleData[]>([]);
-  const [isGlitching, setIsGlitching] = useState(false);
+  const [selectedTimeframe, setSelectedTimeframe] = useState(timeframe);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showSentimentOverlay, setShowSentimentOverlay] = useState(true);
+  const [chartData, setChartData] = useState<ChartPoint[]>([]);
+  const [priceHistory, setPriceHistory] = useState<number[]>([]);
   
-  const tickers = useTickers();
-  const sentiment = useSentiment();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
+  
+  const { tickers: realtimeTickers, sentiment: realtimeSentiment } = useRealtimeData(
+    'tickers',
+    '/api/realtime',
+    {
+      symbol: selectedSymbol,
+      updateInterval: 1000
+    }
+  );
 
-  // Generate mock candle data (to be replaced with real OHLCV data)
+  // Use provided data or fallback to realtime data
+  const currentTickers = tickers || realtimeTickers;
+  const currentSentiment = sentiment || realtimeSentiment;
+  
+  const currentTicker = useMemo(() => {
+    const tickerKey = selectedSymbol.replace('/', '');
+    return currentTickers?.[tickerKey];
+  }, [currentTickers, selectedSymbol]);
+
+  // Generate mock chart data for demo
   useEffect(() => {
-    const generateCandles = () => {
-      const candles: CandleData[] = [];
-      let basePrice = 45000;
-      
-      for (let i = 0; i < 100; i++) {
-        const timestamp = Date.now() - (100 - i) * 3600000; // 1 hour intervals
-        const volatility = 0.02 + (Math.random() * 0.03);
-        const change = (Math.random() - 0.5) * volatility;
-        
-        const open = basePrice;
-        const close = basePrice * (1 + change);
-        const high = Math.max(open, close) * (1 + Math.random() * 0.01);
-        const low = Math.min(open, close) * (1 - Math.random() * 0.01);
-        const volume = 100 + Math.random() * 500;
-        
-        candles.push({
-          timestamp,
-          open,
-          high,
-          low,
-          close,
-          volume,
-          sentiment: (Math.random() - 0.5) * 2 // Random sentiment for each candle
-        });
-        
-        basePrice = close;
-      }
-      
-      setCandleData(candles);
-    };
+    if (demoMode || !currentTicker) {
+      const basePrice = { 'BTC/USD': 45000, 'ETH/USD': 3200, 'SOL/USD': 85, 'ADA/USD': 0.45 }[selectedSymbol] || 100;
+      const prices = generateMockPriceData(basePrice, 50, 0.015);
+      const newChartData: ChartPoint[] = prices.map((price, index) => ({
+        timestamp: Date.now() - (50 - index) * 60000,
+        price,
+        sentiment: (Math.sin(index * 0.1) + Math.random() * 0.4 - 0.2) * 0.8,
+        volume: Math.random() * 1000000
+      }));
+      setChartData(newChartData);
+      setPriceHistory(prices);
+    }
+  }, [demoMode, selectedSymbol, currentTicker]);
 
-    generateCandles();
-  }, [selectedSymbol]);
-
-  // Cyberpunk glitch effect
+  // Update chart data with real price movements
   useEffect(() => {
-    const glitchInterval = setInterval(() => {
-      if (Math.random() > 0.98) {
-        setIsGlitching(true);
-        setTimeout(() => setIsGlitching(false), 100);
-      }
-    }, 2000);
-
-    return () => clearInterval(glitchInterval);
-  }, []);
+    if (currentTicker && !demoMode) {
+      const newPoint: ChartPoint = {
+        timestamp: Date.now(),
+        price: currentTicker.price,
+        sentiment: currentSentiment?.sentiment || 0,
+        volume: currentTicker.volume24h || 0
+      };
+      
+      setChartData(prev => {
+        const updated = [...prev.slice(-49), newPoint];
+        return updated;
+      });
+      
+      setPriceHistory(prev => {
+        const updated = [...prev.slice(-49), currentTicker.price];
+        return updated;
+      });
+    }
+  }, [currentTicker, currentSentiment, demoMode]);
 
   // Canvas drawing logic
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || candleData.length === 0) return;
+    if (!canvas || chartData.length === 0) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * devicePixelRatio;
-    canvas.height = rect.height * devicePixelRatio;
-    ctx.scale(devicePixelRatio, devicePixelRatio);
+    const draw = () => {
+      const { width, height } = canvas.getBoundingClientRect();
+      canvas.width = width * window.devicePixelRatio;
+      canvas.height = height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-    const width = rect.width;
-    const height = rect.height;
-    const padding = 40;
-    const chartWidth = width - padding * 2;
-    const chartHeight = height - padding * 2;
+      // Clear canvas
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, width, height);
 
-    // Clear canvas
-    ctx.fillStyle = '#111827';
-    ctx.fillRect(0, 0, width, height);
+      if (chartData.length < 2) return;
 
-    // Calculate price range
-    const prices = candleData.flatMap(c => [c.high, c.low]);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const priceRange = maxPrice - minPrice;
+      const padding = 40;
+      const chartWidth = width - padding * 2;
+      const chartHeight = height - padding * 2;
 
-    // Draw grid
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 1;
-    
-    // Horizontal grid lines
-    for (let i = 0; i <= 5; i++) {
-      const y = padding + (chartHeight * i) / 5;
-      ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(width - padding, y);
-      ctx.stroke();
-    }
+      // Calculate price bounds
+      const prices = chartData.map(d => d.price);
+      const minPrice = Math.min(...prices);
+      const maxPrice = Math.max(...prices);
+      const priceRange = maxPrice - minPrice || 1;
 
-    // Vertical grid lines
-    for (let i = 0; i <= 10; i++) {
-      const x = padding + (chartWidth * i) / 10;
-      ctx.beginPath();
-      ctx.moveTo(x, padding);
-      ctx.lineTo(x, height - padding);
-      ctx.stroke();
-    }
-
-    // Draw candlesticks with sentiment overlay
-    const candleWidth = chartWidth / candleData.length * 0.8;
-    
-    candleData.forEach((candle, index) => {
-      const x = padding + (index * chartWidth) / candleData.length;
-      
-      // Calculate y positions
-      const openY = padding + chartHeight - ((candle.open - minPrice) / priceRange) * chartHeight;
-      const closeY = padding + chartHeight - ((candle.close - minPrice) / priceRange) * chartHeight;
-      const highY = padding + chartHeight - ((candle.high - minPrice) / priceRange) * chartHeight;
-      const lowY = padding + chartHeight - ((candle.low - minPrice) / priceRange) * chartHeight;
-
-      // Determine candle color
-      const isGreen = candle.close > candle.open;
-      const baseColor = isGreen ? '#10b981' : '#ef4444';
-      
-      // Apply sentiment enhancement
-      const sentimentBoost = Math.abs(candle.sentiment || 0);
-      const alpha = 0.7 + (sentimentBoost * 0.3);
-      
-      // Draw wick
-      ctx.strokeStyle = baseColor;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x + candleWidth / 2, highY);
-      ctx.lineTo(x + candleWidth / 2, lowY);
-      ctx.stroke();
-
-      // Draw body
-      ctx.fillStyle = baseColor + Math.floor(alpha * 255).toString(16).padStart(2, '0');
-      const bodyTop = Math.min(openY, closeY);
-      const bodyHeight = Math.abs(closeY - openY);
-      ctx.fillRect(x, bodyTop, candleWidth, Math.max(bodyHeight, 1));
-
-      // Draw sentiment indicator
-      if (Math.abs(candle.sentiment || 0) > 0.5) {
-        const sentimentColor = (candle.sentiment || 0) > 0 ? '#3b82f6' : '#f59e0b';
-        ctx.fillStyle = sentimentColor + '80';
-        ctx.fillRect(x, padding, candleWidth, 5);
+      // Draw sentiment background heatmap
+      if (showSentimentOverlay) {
+        const gradient = ctx.createLinearGradient(0, padding, 0, height - padding);
+        chartData.forEach((point, index) => {
+          const position = index / (chartData.length - 1);
+          const sentiment = point.sentiment;
+          const alpha = Math.abs(sentiment) * 0.3;
+          const color = sentiment > 0 
+            ? `rgba(34, 197, 94, ${alpha})` 
+            : `rgba(239, 68, 68, ${alpha})`;
+          gradient.addColorStop(position, color);
+        });
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(padding, padding, chartWidth, chartHeight);
       }
-    });
 
-    // Draw current price line
-    const currentTicker = tickers?.[selectedSymbol.replace('/', '')] || tickers?.['BTCUSD'];
-    if (currentTicker) {
-      const currentPrice = currentTicker.price;
-      const currentY = padding + chartHeight - ((currentPrice - minPrice) / priceRange) * chartHeight;
-      
-      ctx.strokeStyle = '#8b5cf6';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
+      // Draw price line
       ctx.beginPath();
-      ctx.moveTo(padding, currentY);
-      ctx.lineTo(width - padding, currentY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Price label
-      ctx.fillStyle = '#8b5cf6';
-      ctx.font = '12px monospace';
-      ctx.fillText(`$${currentPrice.toFixed(2)}`, width - padding + 5, currentY + 4);
-    }
-
-    // Draw sentiment heatmap overlay
-    if (sentiment?.sentiment !== undefined) {
-      const sentimentValue = sentiment.sentiment;
-      const overlayAlpha = Math.abs(sentimentValue) * 0.1;
-      const overlayColor = sentimentValue > 0 ? '#10b981' : '#ef4444';
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2;
       
-      ctx.fillStyle = overlayColor + Math.floor(overlayAlpha * 255).toString(16).padStart(2, '0');
-      ctx.fillRect(padding, padding, chartWidth, chartHeight);
-    }
+      chartData.forEach((point, index) => {
+        const x = padding + (index / (chartData.length - 1)) * chartWidth;
+        const y = padding + (1 - (point.price - minPrice) / priceRange) * chartHeight;
+        
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
 
-  }, [candleData, selectedSymbol, tickers, sentiment]);
+      // Draw sentiment indicators
+      if (showSentimentOverlay) {
+        chartData.forEach((point, index) => {
+          const x = padding + (index / (chartData.length - 1)) * chartWidth;
+          const sentimentHeight = Math.abs(point.sentiment) * 30;
+          const y = point.sentiment > 0 
+            ? padding - sentimentHeight 
+            : height - padding;
+          
+          ctx.fillStyle = point.sentiment > 0 
+            ? 'rgba(34, 197, 94, 0.6)' 
+            : 'rgba(239, 68, 68, 0.6)';
+          ctx.fillRect(x - 1, y, 2, sentimentHeight);
+        });
+      }
 
-  const availableSymbols = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'ADA/USD'];
-  
-  const getCurrentPrice = () => {
-    const ticker = tickers?.[selectedSymbol.replace('/', '')] || tickers?.['BTCUSD'];
-    return ticker?.price || 0;
+      // Draw grid lines
+      ctx.strokeStyle = 'rgba(75, 85, 99, 0.3)';
+      ctx.lineWidth = 1;
+      
+      // Horizontal grid lines
+      for (let i = 0; i <= 4; i++) {
+        const y = padding + (i / 4) * chartHeight;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(width - padding, y);
+        ctx.stroke();
+        
+        // Price labels
+        const price = maxPrice - (i / 4) * priceRange;
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText(formatPrice(price), padding - 10, y + 4);
+      }
+
+      // Vertical grid lines
+      const timeLabels = generateTimeLabels(selectedTimeframe, 5);
+      for (let i = 0; i < 5; i++) {
+        const x = padding + (i / 4) * chartWidth;
+        ctx.beginPath();
+        ctx.moveTo(x, padding);
+        ctx.lineTo(x, height - padding);
+        ctx.stroke();
+        
+        // Time labels
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(timeLabels[i] || '', x, height - 10);
+      }
+
+      // Current price indicator
+      if (currentTicker) {
+        const currentY = padding + (1 - (currentTicker.price - minPrice) / priceRange) * chartHeight;
+        
+        // Price line
+        ctx.strokeStyle = currentTicker.change24h >= 0 ? '#10b981' : '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(padding, currentY);
+        ctx.lineTo(width - padding, currentY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Price label
+        ctx.fillStyle = currentTicker.change24h >= 0 ? '#10b981' : '#ef4444';
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText(formatPrice(currentTicker.price), width - padding - 10, currentY - 10);
+      }
+
+      // Draw crosshair on hover (simplified for demo)
+      // This would be enhanced with proper mouse tracking
+    };
+
+    draw();
+    animationRef.current = requestAnimationFrame(draw);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [chartData, currentTicker, selectedTimeframe, showSentimentOverlay]);
+
+  const handleSymbolChange = (newSymbol: string) => {
+    setSelectedSymbol(newSymbol);
+    setChartData([]);
+    setPriceHistory([]);
   };
 
-  const getPriceChange = () => {
-    const ticker = tickers?.[selectedSymbol.replace('/', '')] || tickers?.['BTCUSD'];
-    return ticker?.change24h || 0;
-  };
-
-  const getSentimentColor = () => {
-    if (!sentiment?.sentiment) return 'text-gray-400';
-    return sentiment.sentiment > 0 ? 'text-green-400' : 'text-red-400';
-  };
+  const priceChange = currentTicker ? currentTicker.change24h || 0 : 0;
+  const currentPrice = currentTicker ? currentTicker.price : (priceHistory[priceHistory.length - 1] || 0);
 
   return (
-    <Card className="bg-gray-900 border-purple-500/30 quantum-glow">
+    <motion.div
+      className={`${cyberCard} ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
       <CardHeader className="pb-2">
-        <CardTitle className={`flex items-center justify-between text-white transition-colors ${isGlitching ? 'animate-pulse' : ''}`}>
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-purple-400" />
-            <span className="font-mono">TRADING_CHART_&_SENTIMENT</span>
-            {sentiment?.signal_boost_active && (
-              <Badge className="bg-purple-500/20 text-purple-400 animate-pulse">
-                <Zap className="w-3 h-3 mr-1" />
-                ENHANCED
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-white text-lg sm:text-xl">
+              📈 {selectedSymbol} Trading Chart
+            </CardTitle>
+            {currentSentiment && (
+              <Badge 
+                className={`${getSentimentColor(currentSentiment.sentiment)} border-current`}
+                variant="outline"
+              >
+                Sentiment: {(currentSentiment.sentiment * 100).toFixed(1)}%
               </Badge>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {availableSymbols.map((sym) => (
-              <Button
-                key={sym}
-                size="sm"
-                variant={selectedSymbol === sym ? "default" : "outline"}
-                onClick={() => setSelectedSymbol(sym)}
-                className={`font-mono text-xs ${
-                  selectedSymbol === sym 
-                    ? 'bg-purple-600 text-white' 
-                    : 'border-gray-600 text-gray-300 hover:bg-gray-800'
-                }`}
-              >
-                {sym}
-              </Button>
-            ))}
-          </div>
-        </CardTitle>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Price Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-3xl font-mono font-bold text-white">
-              ${getCurrentPrice().toFixed(2)}
-            </div>
-            <div className={`flex items-center gap-1 text-sm font-mono ${
-              getPriceChange() >= 0 ? 'text-green-400' : 'text-red-400'
-            }`}>
-              {getPriceChange() >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {getPriceChange() >= 0 ? '+' : ''}{getPriceChange().toFixed(2)}% (24H)
-            </div>
-          </div>
           
-          {sentiment && (
-            <div className="text-right">
-              <div className="text-sm text-gray-400 font-mono">SENTIMENT</div>
-              <div className={`text-2xl font-mono font-bold ${getSentimentColor()}`}>
-                {sentiment.sentiment >= 0 ? '+' : ''}{sentiment.sentiment.toFixed(3)}
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={selectedSymbol} onValueChange={handleSymbolChange}>
+              <SelectTrigger className="w-32 bg-gray-800 border-gray-600 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-gray-600">
+                <SelectItem value="BTC/USD">BTC/USD</SelectItem>
+                <SelectItem value="ETH/USD">ETH/USD</SelectItem>
+                <SelectItem value="SOL/USD">SOL/USD</SelectItem>
+                <SelectItem value="ADA/USD">ADA/USD</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedTimeframe} onValueChange={setSelectedTimeframe}>
+              <SelectTrigger className="w-24 bg-gray-800 border-gray-600 text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-gray-600">
+                {TIMEFRAMES.map(tf => (
+                  <SelectItem key={tf.value} value={tf.value}>
+                    {tf.value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSentimentOverlay(!showSentimentOverlay)}
+              className={`border-gray-600 ${showSentimentOverlay ? 'bg-blue-600' : 'bg-gray-800'} text-white`}
+            >
+              🧠
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="border-gray-600 bg-gray-800 text-white"
+            >
+              {isFullscreen ? '📥' : '📤'}
+            </Button>
+          </div>
+        </div>
+        
+        {/* Price Display */}
+        <div className="flex flex-wrap items-center gap-4 mt-2">
+          <div className="text-2xl sm:text-3xl font-mono text-white">
+            {formatPrice(currentPrice)}
+          </div>
+          <div className={`text-lg font-medium ${getChangeColor(priceChange)}`}>
+            {formatPercentage(priceChange)}
+          </div>
+          {currentTicker && (
+            <>
+              <div className="text-sm text-gray-400">
+                H: {formatPrice(currentTicker.high24h)}
               </div>
-              <div className="text-xs text-gray-400 font-mono">
-                {(sentiment.confidence * 100).toFixed(0)}% CONFIDENCE
+              <div className="text-sm text-gray-400">
+                L: {formatPrice(currentTicker.low24h)}
               </div>
-            </div>
+              <div className="text-sm text-gray-400">
+                Vol: {currentTicker.volume24h ? (currentTicker.volume24h / 1000000).toFixed(1) + 'M' : 'N/A'}
+              </div>
+            </>
           )}
         </div>
+      </CardHeader>
 
-        {/* Chart Canvas */}
-        <div className="relative h-96 bg-gray-800 rounded border border-gray-600">
+      <CardContent className="p-0">
+        <div className="relative">
           <canvas
             ref={canvasRef}
-            className="w-full h-full"
-            style={{ imageRendering: 'pixelated' }}
+            className="w-full h-64 sm:h-80 lg:h-96 cursor-crosshair"
+            style={{ display: 'block' }}
           />
           
-          {/* Sentiment Enhancement Overlay */}
-          {sentiment?.enhancement_multiplier && Math.abs(sentiment.enhancement_multiplier) > 0.1 && (
-            <motion.div
-              className="absolute top-2 right-2 bg-purple-900/90 p-2 rounded border border-purple-500/50"
-              animate={{ 
-                boxShadow: [
-                  '0 0 10px rgba(139, 92, 246, 0.3)',
-                  '0 0 20px rgba(139, 92, 246, 0.6)',
-                  '0 0 10px rgba(139, 92, 246, 0.3)'
-                ]
-              }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <div className="text-purple-400 text-sm font-mono">
-                SIGNAL BOOST: {(sentiment.enhancement_multiplier * 100).toFixed(0)}%
-              </div>
-            </motion.div>
+          {/* Sentiment Legend */}
+          <AnimatePresence>
+            {showSentimentOverlay && (
+              <motion.div
+                className="absolute top-4 right-4 bg-black/70 rounded p-2 text-xs text-white"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-3 h-3 bg-green-500/60 rounded"></div>
+                  <span>Bullish Sentiment</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-500/60 rounded"></div>
+                  <span>Bearish Sentiment</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Loading Overlay */}
+          {!currentTicker && !demoMode && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 backdrop-blur-sm">
+              <motion.div
+                className="text-white text-center"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                <div className="text-2xl mb-2">📡</div>
+                <div>Loading market data...</div>
+              </motion.div>
+            </div>
+          )}
+
+          {/* Demo Mode Indicator */}
+          {demoMode && (
+            <div className="absolute top-4 left-4 bg-purple-600/80 rounded px-2 py-1 text-xs text-white font-semibold">
+              🎭 DEMO MODE
+            </div>
           )}
         </div>
 
         {/* Chart Controls */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-2">
-            {['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) => (
-              <Button
-                key={tf}
-                size="sm"
-                variant={timeframe === tf ? "default" : "outline"}
-                className={`font-mono text-xs ${
-                  timeframe === tf 
-                    ? 'bg-blue-600 text-white' 
-                    : 'border-gray-600 text-gray-300 hover:bg-gray-800'
-                }`}
-              >
-                {tf}
-              </Button>
-            ))}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Badge className="bg-gray-800 text-gray-300 font-mono">
-              VOL: {tickers?.[selectedSymbol.replace('/', '')]?.volume24h?.toFixed(0) || '0'}
-            </Badge>
-            <Badge className="bg-gray-800 text-gray-300 font-mono">
-              SPREAD: {tickers?.[selectedSymbol.replace('/', '')]?.spread?.toFixed(3) || '0.000'}%
-            </Badge>
+        <div className="p-4 border-t border-gray-700">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Chart Style:</span>
+              <div className="flex rounded border border-gray-600 overflow-hidden">
+                <button className="px-3 py-1 bg-blue-600 text-white text-xs">Line</button>
+                <button className="px-3 py-1 bg-gray-700 text-gray-300 text-xs hover:bg-gray-600">Candle</button>
+                <button className="px-3 py-1 bg-gray-700 text-gray-300 text-xs hover:bg-gray-600">Area</button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Indicators:</span>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-600 bg-gray-800 text-white text-xs px-2 py-1"
+                >
+                  RSI
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-600 bg-gray-800 text-white text-xs px-2 py-1"
+                >
+                  MACD
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-600 bg-gray-800 text-white text-xs px-2 py-1"
+                >
+                  BB
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>
-    </Card>
+    </motion.div>
   );
 };
 

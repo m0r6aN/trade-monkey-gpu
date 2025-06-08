@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TradeMonkey Fusion - Enhanced Sentiment Analysis Engine
+TradeMonkey Fusion - Sentiment Analysis Engine
 "When AI meets market psychology, legends are born" 🧠💎
 
 This module gives TradeMonkey psychic powers to read market sentiment
@@ -151,7 +151,7 @@ class EnhancedSentimentAnalyzer:
         self.sentiment_history = []
         self.max_history = 1000
         
-        logger.info(f"🧠 Enhanced Sentiment Analyzer initialized on {self.device}")
+        logger.info(f"🧠 Sentiment Analyzer initialized on {self.device}")
         logger.info(f"🎯 Using ensemble: {self.config.use_ensemble}")
     
     def _load_models(self):
@@ -491,24 +491,24 @@ class TradeMonkeySentimentIntegration:
         )
         
         # Apply sentiment adjustments
-        enhanced_signal = original_signal.copy()
+        signal = original_signal.copy()
         
         # Adjust confidence based on sentiment
-        enhanced_signal['confidence'] *= sentiment_signal['confidence_multiplier']
+        signal['confidence'] *= sentiment_signal['confidence_multiplier']
         
         # Add sentiment to signal strength
-        enhanced_signal['signal_strength'] = enhanced_signal.get('signal_strength', 0) + sentiment_signal['signal_strength']
+        signal['signal_strength'] = signal.get('signal_strength', 0) + sentiment_signal['signal_strength']
         
         # Add sentiment metadata
-        enhanced_signal['sentiment'] = {
+        signal['sentiment'] = {
             'raw_sentiment': sentiment_signal['raw_sentiment'],
             'sentiment_trend': sentiment_signal['sentiment_trend'],
             'adjustment': sentiment_signal['sentiment_adjustment']
         }
         
-        logger.info(f"🚀 Enhanced signal with sentiment: {sentiment_signal['raw_sentiment']:.3f}")
+        logger.info(f"🚀 Signal with sentiment: {sentiment_signal['raw_sentiment']:.3f}")
         
-        return enhanced_signal
+        return signal
 
 # Example usage and testing
 async def main():

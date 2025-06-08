@@ -2,11 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Brain, Calculator, Search, TrendingUp, Zap, Settings, CheckCircle, AlertCircle, Clock } from 'lucide-react';
-import { useAgents } from '@/hooks/useRealtimeData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
+import { useRealtimeData } from '@/hooks/useRealtimeData';
 
 interface OMEGAAgent {
   id: string;
@@ -33,7 +32,7 @@ interface TaskLog {
 }
 
 const OMEGAAgentConsole: React.FC = () => {
-  const agents = useAgents();
+  const agents = useRealtimeData<OMEGAAgent[]>('agents', '/api/agents/live');
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [networkLoad, setNetworkLoad] = useState(0);
   const [taskLogs, setTaskLogs] = useState<TaskLog[]>([]);

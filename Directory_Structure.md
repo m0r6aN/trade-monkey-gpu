@@ -98,9 +98,11 @@ D:\Repos\trade-monkey-lite\trade-monkey-gpu/
 │       ├── kraken_connectivity_test.py
 │       ├── reorg.py
 │       ├── results_analyzer_suite.py
+│       ├── test_api_server.py
 │       ├── test_config.py
 │       ├── test_gpu_backtesting.py
 │       ├── test_kraken_endpoints.py
+│       ├── test_sentiment_engine.py
 │       └── test_strategies.py
 ├── trademonkey-fusion-ui
 │   D:\Repos\trade-monkey-lite\trade-monkey-gpu\trademonkey-fusion-ui/
@@ -183,7 +185,9 @@ D:\Repos\trade-monkey-lite\trade-monkey-gpu/
 │   │   │       ├── button.tsx
 │   │   │       ├── card.tsx
 │   │   │       ├── checkbox.tsx
+│   │   │       ├── cyberpunk_animations.ts
 │   │   │       ├── dialog.tsx
+│   │   │       ├── error_alert_component.ts
 │   │   │       ├── input.tsx
 │   │   │       ├── label.tsx
 │   │   │       ├── popover.tsx
