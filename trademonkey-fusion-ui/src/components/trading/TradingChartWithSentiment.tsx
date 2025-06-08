@@ -1,336 +1,346 @@
 // File: src/components/trading/TradingChartWithSentiment.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, Brain, Zap, Target, Activity } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useTickers, useSentiment } from '@/hooks/useRealtimeData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { SentimentData, TickerData, ChartData, SentimentSignal } from '@/types/trading';
+import { Button } from '@/components/ui/button';
+import { TrendingUp, TrendingDown, Activity, Zap } from 'lucide-react';
 
-interface TradingChartProps {
-  symbol?: string;
-  timeframe?: string;
-  demoMode?: boolean;
-  tickers?: TickerData;
-  sentiment?: SentimentData;
+interface CandleData {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  sentiment?: number;
 }
 
-const TradingChartWithSentiment: React.FC<TradingChartProps> = ({ 
+interface ChartProps {
+  symbol?: string;
+  timeframe?: string;
+}
+
+const TradingChartWithSentiment: React.FC<ChartProps> = ({ 
   symbol = 'BTC/USD', 
-  timeframe = '1h',
-  demoMode = false,
-  tickers,
-  sentiment: propSentiment
+  timeframe = '1h' 
 }) => {
-  const [chartData, setChartData] = useState<ChartData[]>([]);
-  const [currentSentiment, setCurrentSentiment] = useState<SentimentSignal>({
-    confidence: propSentiment?.confidence || 0.85,
-    sentiment: propSentiment?.sentiment || 0.67,  // Using 'sentiment' field now
-    boost: propSentiment?.boost || 0.35,
-    alignment: propSentiment?.alignment || 'strong_bullish'
-  });
-  const [activeSignals, setActiveSignals] = useState<any[]>([]);
-  const [isGlitching, setIsGlitching] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState(symbol);
+  const [candleData, setCandleData] = useState<CandleData[]>([]);
+  const [isGlitching, setIsGlitching] = useState(false);
+  
+  const tickers = useTickers();
+  const sentiment = useSentiment();
 
-  // Update sentiment when props change
+  // Generate mock candle data (to be replaced with real OHLCV data)
   useEffect(() => {
-    if (propSentiment) {
-      setCurrentSentiment({
-        confidence: propSentiment.confidence || 0.85,
-        sentiment: propSentiment.sentiment || 0.67,  // Using 'sentiment' field now
-        boost: propSentiment.boost || 0.35,
-        alignment: propSentiment.alignment || 'strong_bullish'
-      });
-    }
-  }, [propSentiment]);
-
-  // Generate demo data with cyberpunk flair
-  useEffect(() => {
-    if (demoMode) {
-      const generateDemoData = () => {
-        const data: ChartData[] = [];
-        let basePrice = tickers?.[symbol]?.price || 65000;
+    const generateCandles = () => {
+      const candles: CandleData[] = [];
+      let basePrice = 45000;
+      
+      for (let i = 0; i < 100; i++) {
+        const timestamp = Date.now() - (100 - i) * 3600000; // 1 hour intervals
+        const volatility = 0.02 + (Math.random() * 0.03);
+        const change = (Math.random() - 0.5) * volatility;
         
-        for (let i = 0; i < 50; i++) {
-          const sentiment = Math.sin(i * 0.3) * 0.4 + Math.random() * 0.4;
-          const priceChange = sentiment * 1000 + (Math.random() - 0.5) * 500;
-          basePrice += priceChange;
-          
-          data.push({
-            timestamp: Date.now() - (50 - i) * 3600000,
-            price: basePrice,
-            volume: Math.random() * 100000 + 50000,
-            sentiment: sentiment,
-            signals: Math.random() > 0.8 ? [{
-              type: sentiment > 0 ? 'buy' : 'sell',
-              price: basePrice,
-              confidence: 0.7 + Math.random() * 0.3,
-              boost: sentiment * 0.5
-            }] : []
-          });
-        }
-        setChartData(data);
-      };
+        const open = basePrice;
+        const close = basePrice * (1 + change);
+        const high = Math.max(open, close) * (1 + Math.random() * 0.01);
+        const low = Math.min(open, close) * (1 - Math.random() * 0.01);
+        const volume = 100 + Math.random() * 500;
+        
+        candles.push({
+          timestamp,
+          open,
+          high,
+          low,
+          close,
+          volume,
+          sentiment: (Math.random() - 0.5) * 2 // Random sentiment for each candle
+        });
+        
+        basePrice = close;
+      }
+      
+      setCandleData(candles);
+    };
 
-      generateDemoData();
-      const interval = setInterval(generateDemoData, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [demoMode, symbol, tickers]);
+    generateCandles();
+  }, [selectedSymbol]);
 
-  // Cyberpunk glitch effect trigger
+  // Cyberpunk glitch effect
   useEffect(() => {
     const glitchInterval = setInterval(() => {
-      if (Math.random() > 0.95) { // 5% chance every 2 seconds
+      if (Math.random() > 0.98) {
         setIsGlitching(true);
-        setTimeout(() => setIsGlitching(false), 200);
+        setTimeout(() => setIsGlitching(false), 100);
       }
     }, 2000);
 
     return () => clearInterval(glitchInterval);
   }, []);
 
-  // Enhanced chart drawing with cyberpunk effects
+  // Canvas drawing logic
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !chartData.length) return;
+    if (!canvas || candleData.length === 0) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * devicePixelRatio;
+    canvas.height = rect.height * devicePixelRatio;
+    ctx.scale(devicePixelRatio, devicePixelRatio);
 
-    // Clear canvas with dark cyberpunk background
-    ctx.fillStyle = 'rgba(10, 10, 20, 0.95)';
+    const width = rect.width;
+    const height = rect.height;
+    const padding = 40;
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
+
+    // Clear canvas
+    ctx.fillStyle = '#111827';
     ctx.fillRect(0, 0, width, height);
 
-    // Calculate scales
-    const prices = chartData.map(d => d.price);
+    // Calculate price range
+    const prices = candleData.flatMap(c => [c.high, c.low]);
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const priceRange = maxPrice - minPrice;
 
-    // Draw cyberpunk grid
-    ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
-    ctx.lineWidth = 0.5;
-    
-    // Vertical grid lines
-    for (let i = 0; i <= 10; i++) {
-      const x = (i / 10) * width;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
+    // Draw grid
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 1;
     
     // Horizontal grid lines
-    for (let i = 0; i <= 8; i++) {
-      const y = (i / 8) * height;
+    for (let i = 0; i <= 5; i++) {
+      const y = padding + (chartHeight * i) / 5;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
+      ctx.moveTo(padding, y);
+      ctx.lineTo(width - padding, y);
       ctx.stroke();
     }
 
-    // Draw sentiment heatmap background with cyberpunk glow
-    chartData.forEach((data, i) => {
-      const x = (i / (chartData.length - 1)) * width;
-      const hue = data.sentiment > 0 ? 180 : 340; // Cyan for bull, Pink for bear
-      const saturation = Math.abs(data.sentiment) * 85;
-      const lightness = 30 + Math.abs(data.sentiment) * 40;
-      
-      const gradient = ctx.createLinearGradient(x - 5, 0, x + 5, height);
-      gradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.4)`);
-      gradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness}%, 0.1)`);
-      
-      ctx.fillStyle = gradient;
-      ctx.fillRect(x - 5, 0, 10, height);
-    });
+    // Vertical grid lines
+    for (let i = 0; i <= 10; i++) {
+      const x = padding + (chartWidth * i) / 10;
+      ctx.beginPath();
+      ctx.moveTo(x, padding);
+      ctx.lineTo(x, height - padding);
+      ctx.stroke();
+    }
 
-    // Draw holographic price line with glow effect
-    ctx.shadowColor = '#00ffff';
-    ctx.shadowBlur = 10;
-    ctx.strokeStyle = '#00ffff';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
+    // Draw candlesticks with sentiment overlay
+    const candleWidth = chartWidth / candleData.length * 0.8;
     
-    chartData.forEach((data, i) => {
-      const x = (i / (chartData.length - 1)) * width;
-      const y = height - ((data.price - minPrice) / priceRange) * height;
+    candleData.forEach((candle, index) => {
+      const x = padding + (index * chartWidth) / candleData.length;
       
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
+      // Calculate y positions
+      const openY = padding + chartHeight - ((candle.open - minPrice) / priceRange) * chartHeight;
+      const closeY = padding + chartHeight - ((candle.close - minPrice) / priceRange) * chartHeight;
+      const highY = padding + chartHeight - ((candle.high - minPrice) / priceRange) * chartHeight;
+      const lowY = padding + chartHeight - ((candle.low - minPrice) / priceRange) * chartHeight;
+
+      // Determine candle color
+      const isGreen = candle.close > candle.open;
+      const baseColor = isGreen ? '#10b981' : '#ef4444';
+      
+      // Apply sentiment enhancement
+      const sentimentBoost = Math.abs(candle.sentiment || 0);
+      const alpha = 0.7 + (sentimentBoost * 0.3);
+      
+      // Draw wick
+      ctx.strokeStyle = baseColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + candleWidth / 2, highY);
+      ctx.lineTo(x + candleWidth / 2, lowY);
+      ctx.stroke();
+
+      // Draw body
+      ctx.fillStyle = baseColor + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+      const bodyTop = Math.min(openY, closeY);
+      const bodyHeight = Math.abs(closeY - openY);
+      ctx.fillRect(x, bodyTop, candleWidth, Math.max(bodyHeight, 1));
+
+      // Draw sentiment indicator
+      if (Math.abs(candle.sentiment || 0) > 0.5) {
+        const sentimentColor = (candle.sentiment || 0) > 0 ? '#3b82f6' : '#f59e0b';
+        ctx.fillStyle = sentimentColor + '80';
+        ctx.fillRect(x, padding, candleWidth, 5);
       }
     });
-    ctx.stroke();
-    
-    // Reset shadow
-    ctx.shadowBlur = 0;
 
-    // Draw cyberpunk signal badges with neon glow
-    chartData.forEach((data, i) => {
-      data.signals.forEach(signal => {
-        const x = (i / (chartData.length - 1)) * width;
-        const y = height - ((signal.price - minPrice) / priceRange) * height;
-        
-        // Outer glow
-        ctx.shadowColor = signal.type === 'buy' ? '#00ff00' : '#ff0080';
-        ctx.shadowBlur = 15;
-        
-        // Signal circle with gradient
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, 12);
-        gradient.addColorStop(0, signal.type === 'buy' ? '#00ff88' : '#ff0080');
-        gradient.addColorStop(1, signal.type === 'buy' ? '#004422' : '#440022');
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(x, y, 10, 0, 2 * Math.PI);
-        ctx.fill();
-        
-        // Signal arrow with holographic effect
-        ctx.shadowBlur = 5;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 14px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(signal.type === 'buy' ? '↗' : '↙', x, y + 5);
-      });
-    });
-    
-    // Reset shadow
-    ctx.shadowBlur = 0;
-
-  }, [chartData]);
-
-  // Demo scenario updates with cyberpunk theme
-  useEffect(() => {
-    if (demoMode) {
-      const scenarios = [
-        { sentiment: 0.85, confidence: 0.92, boost: 0.35, alignment: 'QUANTUM_BULLISH' },
-        { sentiment: -0.75, confidence: 0.88, boost: -0.20, alignment: 'MATRIX_BEARISH' },
-        { sentiment: 0.45, confidence: 0.65, boost: 0.15, alignment: 'CYBER_NEUTRAL' }
-      ];
+    // Draw current price line
+    const currentTicker = tickers?.[selectedSymbol.replace('/', '')] || tickers?.['BTCUSD'];
+    if (currentTicker) {
+      const currentPrice = currentTicker.price;
+      const currentY = padding + chartHeight - ((currentPrice - minPrice) / priceRange) * chartHeight;
       
-      let scenarioIndex = 0;
-      const interval = setInterval(() => {
-        setCurrentSentiment(scenarios[scenarioIndex]);
-        scenarioIndex = (scenarioIndex + 1) % scenarios.length;
-      }, 15000);
-      
-      return () => clearInterval(interval);
+      ctx.strokeStyle = '#8b5cf6';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(padding, currentY);
+      ctx.lineTo(width - padding, currentY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Price label
+      ctx.fillStyle = '#8b5cf6';
+      ctx.font = '12px monospace';
+      ctx.fillText(`$${currentPrice.toFixed(2)}`, width - padding + 5, currentY + 4);
     }
-  }, [demoMode]);
 
-  const getSentimentColor = (sentiment: number) => {
-    if (sentiment > 0.5) return 'text-cyber-blue';
-    if (sentiment < -0.5) return 'text-cyber-pink';
-    return 'text-cyber-green';
+    // Draw sentiment heatmap overlay
+    if (sentiment?.sentiment !== undefined) {
+      const sentimentValue = sentiment.sentiment;
+      const overlayAlpha = Math.abs(sentimentValue) * 0.1;
+      const overlayColor = sentimentValue > 0 ? '#10b981' : '#ef4444';
+      
+      ctx.fillStyle = overlayColor + Math.floor(overlayAlpha * 255).toString(16).padStart(2, '0');
+      ctx.fillRect(padding, padding, chartWidth, chartHeight);
+    }
+
+  }, [candleData, selectedSymbol, tickers, sentiment]);
+
+  const availableSymbols = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'ADA/USD'];
+  
+  const getCurrentPrice = () => {
+    const ticker = tickers?.[selectedSymbol.replace('/', '')] || tickers?.['BTCUSD'];
+    return ticker?.price || 0;
   };
 
-  const getBoostBadgeColor = (boost: number) => {
-    if (boost > 0.2) return 'bg-gradient-to-r from-cyber-blue to-cyber-green';
-    if (boost < -0.1) return 'bg-gradient-to-r from-cyber-pink to-red-500';
-    return 'bg-gradient-to-r from-purple-500 to-cyber-blue';
+  const getPriceChange = () => {
+    const ticker = tickers?.[selectedSymbol.replace('/', '')] || tickers?.['BTCUSD'];
+    return ticker?.change24h || 0;
   };
 
-  const currentPrice = tickers?.[symbol]?.price || (chartData.length ? chartData[chartData.length - 1].price : 65420);
-  const change24h = tickers?.[symbol]?.change24h || 2.34;
+  const getSentimentColor = () => {
+    if (!sentiment?.sentiment) return 'text-gray-400';
+    return sentiment.sentiment > 0 ? 'text-green-400' : 'text-red-400';
+  };
 
   return (
-    <Card className="cyber-card w-full h-96 relative overflow-hidden">
+    <Card className="bg-gray-900 border-purple-500/30 quantum-glow">
       <CardHeader className="pb-2">
-        <CardTitle className={`flex items-center justify-between text-cyber-blue glow-text ${isGlitching ? 'cyber-glitch' : ''}`}>
+        <CardTitle className={`flex items-center justify-between text-white transition-colors ${isGlitching ? 'animate-pulse' : ''}`}>
           <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-cyber-blue" />
-            <span className="font-mono">{symbol}</span>
-            <Badge variant="outline" className="cyber-button text-xs">
-              {timeframe}
-            </Badge>
+            <Activity className="w-5 h-5 text-purple-400" />
+            <span className="font-mono">TRADING_CHART_&_SENTIMENT</span>
+            {sentiment?.signal_boost_active && (
+              <Badge className="bg-purple-500/20 text-purple-400 animate-pulse">
+                <Zap className="w-3 h-3 mr-1" />
+                ENHANCED
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            <AnimatePresence>
-              <motion.div
-                key={currentSentiment.boost}
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                exit={{ scale: 0, rotate: 180 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
+            {availableSymbols.map((sym) => (
+              <Button
+                key={sym}
+                size="sm"
+                variant={selectedSymbol === sym ? "default" : "outline"}
+                onClick={() => setSelectedSymbol(sym)}
+                className={`font-mono text-xs ${
+                  selectedSymbol === sym 
+                    ? 'bg-purple-600 text-white' 
+                    : 'border-gray-600 text-gray-300 hover:bg-gray-800'
+                }`}
               >
-                <Badge 
-                  className={`${getBoostBadgeColor(currentSentiment.boost)} text-white font-mono text-xs px-2 py-1 glow-border`}
-                >
-                  <Brain className="w-3 h-3 mr-1" />
-                  {currentSentiment.boost > 0 ? '+' : ''}{(currentSentiment.boost * 100).toFixed(0)}%
-                </Badge>
-              </motion.div>
-            </AnimatePresence>
-            <Badge className="cyber-button border-cyber-blue text-cyber-blue">
-              <Target className="w-3 h-3 mr-1" />
-              {(currentSentiment.confidence * 100).toFixed(0)}%
-            </Badge>
+                {sym}
+              </Button>
+            ))}
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-4">
-        <div className="relative">
-          <canvas
-            ref={canvasRef}
-            width={800}
-            height={240}
-            className="w-full h-60 rounded-lg border border-cyber-blue/30 glow-border bg-gradient-to-br from-gray-900 to-black"
-          />
-          
-          {/* Cyberpunk sentiment overlay */}
-          <motion.div
-            className="absolute top-3 left-3 holo-card p-3 backdrop-blur-md"
-            animate={{ 
-              boxShadow: currentSentiment.sentiment > 0 
-                ? '0 0 25px rgba(0, 255, 255, 0.6)' 
-                : '0 0 25px rgba(255, 0, 128, 0.6)' 
-            }}
-          >
-            <div className="text-xs text-cyber-blue font-mono mb-1 glow-text">MARKET_TELEPATHY</div>
-            <div className={`text-xl font-mono font-bold ${getSentimentColor(currentSentiment.sentiment)} glow-text`}>
-              {currentSentiment.sentiment > 0 ? '+' : ''}{currentSentiment.sentiment.toFixed(3)}
-            </div>
-            <div className="text-xs text-cyber-green font-mono">{currentSentiment.alignment}</div>
-          </motion.div>
 
-          {/* Holographic price display */}
-          <div className="absolute top-3 right-3 holo-card p-3 backdrop-blur-md">
-            <div className="text-xs text-cyber-blue font-mono mb-1 glow-text">CURRENT_PRICE</div>
-            <div className="text-xl font-mono font-bold text-cyber-blue glow-text">
-              ${currentPrice.toFixed(2)}
+      <CardContent className="space-y-4">
+        {/* Price Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-3xl font-mono font-bold text-white">
+              ${getCurrentPrice().toFixed(2)}
             </div>
-            <div className={`text-xs font-mono glow-text ${change24h >= 0 ? 'text-cyber-green' : 'text-cyber-pink'}`}>
-              {change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%
+            <div className={`flex items-center gap-1 text-sm font-mono ${
+              getPriceChange() >= 0 ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {getPriceChange() >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+              {getPriceChange() >= 0 ? '+' : ''}{getPriceChange().toFixed(2)}% (24H)
             </div>
           </div>
+          
+          {sentiment && (
+            <div className="text-right">
+              <div className="text-sm text-gray-400 font-mono">SENTIMENT</div>
+              <div className={`text-2xl font-mono font-bold ${getSentimentColor()}`}>
+                {sentiment.sentiment >= 0 ? '+' : ''}{sentiment.sentiment.toFixed(3)}
+              </div>
+              <div className="text-xs text-gray-400 font-mono">
+                {(sentiment.confidence * 100).toFixed(0)}% CONFIDENCE
+              </div>
+            </div>
+          )}
+        </div>
 
-          {/* Cyberpunk signal indicators */}
-          <AnimatePresence>
-            {activeSignals.map((signal, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, scale: 0, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0, y: -20 }}
-                className="absolute bottom-3 left-3 holo-card border-cyber-green p-3"
+        {/* Chart Canvas */}
+        <div className="relative h-96 bg-gray-800 rounded border border-gray-600">
+          <canvas
+            ref={canvasRef}
+            className="w-full h-full"
+            style={{ imageRendering: 'pixelated' }}
+          />
+          
+          {/* Sentiment Enhancement Overlay */}
+          {sentiment?.enhancement_multiplier && Math.abs(sentiment.enhancement_multiplier) > 0.1 && (
+            <motion.div
+              className="absolute top-2 right-2 bg-purple-900/90 p-2 rounded border border-purple-500/50"
+              animate={{ 
+                boxShadow: [
+                  '0 0 10px rgba(139, 92, 246, 0.3)',
+                  '0 0 20px rgba(139, 92, 246, 0.6)',
+                  '0 0 10px rgba(139, 92, 246, 0.3)'
+                ]
+              }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              <div className="text-purple-400 text-sm font-mono">
+                SIGNAL BOOST: {(sentiment.enhancement_multiplier * 100).toFixed(0)}%
+              </div>
+            </motion.div>
+          )}
+        </div>
+
+        {/* Chart Controls */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-2">
+            {['1m', '5m', '15m', '1h', '4h', '1d'].map((tf) => (
+              <Button
+                key={tf}
+                size="sm"
+                variant={timeframe === tf ? "default" : "outline"}
+                className={`font-mono text-xs ${
+                  timeframe === tf 
+                    ? 'bg-blue-600 text-white' 
+                    : 'border-gray-600 text-gray-300 hover:bg-gray-800'
+                }`}
               >
-                <div className="flex items-center gap-2 text-cyber-green text-sm font-mono glow-text">
-                  <Zap className="w-4 h-4" />
-                  <span>SIGNAL: {signal.type.toUpperCase()}</span>
-                  <span>BOOST: +{(signal.boost * 100).toFixed(0)}%</span>
-                </div>
-              </motion.div>
+                {tf}
+              </Button>
             ))}
-          </AnimatePresence>
-
-          {/* Holographic overlay effect */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="w-full h-full bg-gradient-to-r from-transparent via-cyber-blue/5 to-transparent animate-pulse-glow" />
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Badge className="bg-gray-800 text-gray-300 font-mono">
+              VOL: {tickers?.[selectedSymbol.replace('/', '')]?.volume24h?.toFixed(0) || '0'}
+            </Badge>
+            <Badge className="bg-gray-800 text-gray-300 font-mono">
+              SPREAD: {tickers?.[selectedSymbol.replace('/', '')]?.spread?.toFixed(3) || '0.000'}%
+            </Badge>
           </div>
         </div>
       </CardContent>
